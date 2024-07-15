@@ -11,7 +11,7 @@ namespace ShoppingList.Models
         [Required, MaxLength(100)]
         public string Category { get; set; } = "";
         [Required]
-        public string Price { get; set; } = "";
+        public decimal Price { get; set; }
         [MaxLength(100)]
         public string Description { get; set; } = "";
         public IFormFile? ImageFile { get; set; }
