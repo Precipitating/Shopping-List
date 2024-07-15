@@ -8,10 +8,12 @@ namespace ShoppingList.Controllers
     public class ProductsController : Controller
     {
         private readonly ApplicationDbContext context;
+        private readonly IWebHostEnvironment environment;
 
-        public ProductsController(ApplicationDbContext context)
+        public ProductsController(ApplicationDbContext context, IWebHostEnvironment environment)
         {
             this.context = context;
+            this.environment = environment;
         }
         public IActionResult Index()
         {
@@ -24,6 +26,7 @@ namespace ShoppingList.Controllers
             return View();
         }
 
+        // submit button for creating new product
         [HttpPost]
         public IActionResult Create(ProductDto productDto)
         {
@@ -36,6 +39,31 @@ namespace ShoppingList.Controllers
             {
                 return View(productDto);
             }
+
+            // save img
+            string newFileName = DateTime.Now.ToString("yyyyMMddHHmmssfff");
+            newFileName += Path.GetExtension(productDto.ImageFile!.FileName);
+            string fullPath = environment.WebRootPath + "/pictures/" + newFileName;
+            
+            using (var stream = System.IO.File.Create(fullPath))
+            {
+                productDto.ImageFile.CopyTo(stream);
+            }
+
+            // save to db
+            Product product = new Product()
+            {
+                Name = productDto.Name,
+                Brand = productDto.Brand,
+                Category = productDto.Category,
+                Price = productDto.Price,
+                Description = productDto.Description,
+                ImageFileName = newFileName,
+                Created = DateTime.Now
+            };
+
+            context.Products.Add(product);
+            context.SaveChanges();
 
             return RedirectToAction("Index", "Products");
         }
