@@ -9,11 +9,22 @@
 <div class="row mb-5">
     <div class="col">
         <a class="btn btn-primary" asp-controller="Products" asp-action="Create">New Product</a>
-        <p> 1000</p>
+    </div>
+    <div class="col">
+        @{
+            decimal total = default;
+        }
+        @foreach (var product in Model)
+        {
+
+            total += @product.Price;
+
+        }
+        <h2 class="text-center">Total Price = £@total</h2>
+
     </div>
 
-
-    </div>
+    <div class="col"></div>
 </div>
 
 
