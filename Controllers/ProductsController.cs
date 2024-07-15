@@ -94,6 +94,77 @@ namespace ShoppingList.Controllers
 
             return View(productDto);
         }
+
+        [HttpPost]
+        public IActionResult Edit(int id, ProductDto productDto)
+        {
+            var product = context.Products.Find(id);
+
+            if (product == null)
+            {
+                return RedirectToAction("Index", "Products");
+            }
+
+            if (!ModelState.IsValid)
+            {
+                ViewData["ProductId"] = product.Id;
+                ViewData["ImageFileName"] = product.ImageFileName;
+                ViewData["Created"] = product.Created.ToString("MM/dd/yyyy");
+
+                return View(productDto);
+            }
+
+            // update img, if changed
+            string newFileName = product.ImageFileName;
+            if (productDto.ImageFile != null)
+            {
+                newFileName = DateTime.Now.ToString("yyyyMMddHHmmssfff");
+                newFileName += Path.GetExtension(productDto.ImageFile.FileName);
+
+                string fullPath = environment.WebRootPath + "/pictures/" + newFileName;
+
+                using (var stream = System.IO.File.Create(fullPath))
+                {
+                    productDto.ImageFile.CopyTo(stream);
+                }
+
+                // delete old img
+                string oldPath = environment.WebRootPath + "/pictures/" + product.ImageFileName;
+                System.IO.File.Delete(oldPath);
+
+            }
+            // update product in DB
+            product.Name = productDto.Name;
+            product.Brand = productDto.Brand;
+            product.Category = productDto.Category;
+            product.Price = productDto.Price;
+            product.Description = productDto.Description;
+            product.ImageFileName = newFileName;
+
+            context.SaveChanges();
+
+            return RedirectToAction("Index", "Products");
+
+        }
+
+
+        public IActionResult Delete(int id)
+        {
+            var product = context.Products.Find(id);
+
+            if (product == null)
+            {
+                return RedirectToAction("Index", "Products");
+            }
+
+            // delete old img
+            string oldPath = environment.WebRootPath + "/pictures/" + product.ImageFileName;
+            System.IO.File.Delete(oldPath);
+
+            context.Products.Remove(product);
+            context.SaveChanges();
+            return RedirectToAction("Index", "Products");
+        }
     }
 
 
