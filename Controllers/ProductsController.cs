@@ -12,6 +12,7 @@ using System.IO;
 using Azure;
 using System.Xml;
 using System;
+using Microsoft.IdentityModel.Tokens;
 
 
 namespace ShoppingList.Controllers
@@ -42,10 +43,20 @@ namespace ShoppingList.Controllers
         [HttpPost]
         public IActionResult Create(ProductDto productDto)
         {
+            
             if (productDto.ImageFile == null)
             {
                 ModelState.AddModelError("ImageFile", "The image file is required.");
             }
+
+            // if link is 'null' change to empty string
+            if (productDto.Link == null)
+            {
+                productDto.Link = productDto.Link ?? string.Empty;
+                ModelState.Remove("Link");
+            }
+
+
 
             if (!ModelState.IsValid)
             {
@@ -71,7 +82,9 @@ namespace ShoppingList.Controllers
                 Price = productDto.Price,
                 Description = productDto.Description,
                 ImageFileName = newFileName,
+                Link = productDto.Link,
                 Created = DateTime.Now
+
             };
 
             context.Products.Add(product);
@@ -103,7 +116,8 @@ namespace ShoppingList.Controllers
                 Brand = product.Brand,
                 Category = product.Category,
                 Price = product.Price,
-                Description = product.Description
+                Description = product.Description,
+                Link = product.Link
             };
 
             ViewData["ProductId"] = product.Id;
@@ -159,6 +173,7 @@ namespace ShoppingList.Controllers
             product.Price = productDto.Price;
             product.Description = productDto.Description;
             product.ImageFileName = newFileName;
+            product.Link = productDto.Link;
 
             context.SaveChanges();
 
@@ -230,6 +245,7 @@ namespace ShoppingList.Controllers
                 Price = priceConverted,
                 Description = linkProduct.Description,
                 ImageFileName = parsedData[3],
+                Link = linkProduct.Link,
                 Created = DateTime.Now
             };
             context.Products.Add(product);

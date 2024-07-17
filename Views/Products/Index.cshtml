@@ -44,6 +44,7 @@
             <th>Category</th>
             <th>Price</th>
             <th>Image</th>
+            <th>Link</th>
             <th>Created At</th>
             <th>Action</th>
         </tr>
@@ -60,6 +61,14 @@
                 <td>@product.Category</td>
                 <td>@Product.GetCurrencySymbol()@product.Price</td>
                 <td><img src="/pictures/@product.ImageFileName" width="100" /></td>
+                @if (!string.IsNullOrEmpty(product.Link))
+                {
+                    <td><a href="@product.Link">Link</a></td>
+                }
+                else
+                {
+                    <td><a>No Link</a></td>
+                }
                 <td>@product.Created.ToString("MM/dd/yyyy")</td>
                 <td style="white-space:nowrap">
                     <a class= "btn btn-primary btn-sm" asp-controller="Products"

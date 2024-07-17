@@ -22,6 +22,8 @@ namespace ShoppingList.Models
 
         public DateTime Created { get; set; }
 
+        public string Link { get; set; } = "";
+
 
         public static string GetCurrencySymbol()
         {

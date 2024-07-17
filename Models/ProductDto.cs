@@ -17,6 +17,8 @@ namespace ShoppingList.Models
         public string Description { get; set; } = "";
         public IFormFile? ImageFile { get; set; }
 
+        public string Link { get; set; } = "";
+
     }
 
 }
