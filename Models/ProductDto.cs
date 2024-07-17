@@ -1,10 +1,11 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.Runtime.InteropServices;
 
 namespace ShoppingList.Models
 {
     public class ProductDto
     {
-        [Required, MaxLength(100)]
+        [Required, MaxLength(200)]
         public string Name { get; set; } = "";
         [Required, MaxLength(100)]
         public string Brand { get; set; } = "";
@@ -17,4 +18,5 @@ namespace ShoppingList.Models
         public IFormFile? ImageFile { get; set; }
 
     }
+
 }

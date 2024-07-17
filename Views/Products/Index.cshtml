@@ -6,25 +6,29 @@
 
 <h2 class="text-center mb-5"> List of Products</h2>
 
-<div class="row mb-5">
+<div class="row">
     <div class="col">
         <a class="btn btn-primary" asp-controller="Products" asp-action="Create">New Product</a>
     </div>
     <div class="col">
         @{
             decimal total = default;
-        }
-        @foreach (var product in Model)
-        {
+            @foreach (var product in Model)
+            {
 
-            total += @product.Price;
+                total += @product.Price;
 
-        }
-        <h2 class="text-center">Total Price = £@total</h2>
+            }
+
+            <h2 class="text-center">Total Price = @Product.GetCurrencySymbol()@total</h2>
+         }
 
     </div>
 
     <div class="col"></div>
+</div>
+<div class="mb-5">
+    <a class="btn btn-primary" asp-controller="Products" asp-action="LinkToProduct">New Product via link</a>
 </div>
 
 
@@ -54,7 +58,7 @@
                 <td>@product.Name</td>
                 <td>@product.Brand</td>
                 <td>@product.Category</td>
-                <td>£@product.Price</td>
+                <td>@Product.GetCurrencySymbol()@product.Price</td>
                 <td><img src="/pictures/@product.ImageFileName" width="100" /></td>
                 <td>@product.Created.ToString("MM/dd/yyyy")</td>
                 <td style="white-space:nowrap">

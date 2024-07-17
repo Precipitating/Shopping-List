@@ -2,6 +2,17 @@
 using Microsoft.AspNetCore.Mvc.ModelBinding.Binders;
 using ShoppingList.Models;
 using ShoppingList.Services;
+using HtmlAgilityPack;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Threading.Tasks;
+using System.Net;
+using System.Text;
+using System.IO;
+using Azure;
+using System.Xml;
+using System;
+
 
 namespace ShoppingList.Controllers
 {
@@ -26,6 +37,7 @@ namespace ShoppingList.Controllers
             return View();
         }
 
+
         // submit button for creating new product
         [HttpPost]
         public IActionResult Create(ProductDto productDto)
@@ -44,7 +56,7 @@ namespace ShoppingList.Controllers
             string newFileName = DateTime.Now.ToString("yyyyMMddHHmmssfff");
             newFileName += Path.GetExtension(productDto.ImageFile!.FileName);
             string fullPath = environment.WebRootPath + "/pictures/" + newFileName;
-            
+
             using (var stream = System.IO.File.Create(fullPath))
             {
                 productDto.ImageFile.CopyTo(stream);
@@ -66,7 +78,14 @@ namespace ShoppingList.Controllers
             context.SaveChanges();
 
             return RedirectToAction("Index", "Products");
+
+
+
+
         }
+
+
+
 
         public IActionResult Edit(int id)
         {
@@ -165,7 +184,103 @@ namespace ShoppingList.Controllers
             context.SaveChanges();
             return RedirectToAction("Index", "Products");
         }
+        public IActionResult LinkToProduct()
+        {
+            return View();
+        }
+        [HttpPost]
+        public IActionResult LinkToProduct(LinkToProduct lnk)
+        {
+            if (!ModelState.IsValid)
+            {
+                return View(lnk);
+            }
+
+            // if amazon link provided, scrape and attempt to auto fill.
+            WebScrapeAmazon(lnk);
+
+            return RedirectToAction("Index", "Products");
+        }
+        public void WebScrapeAmazon(LinkToProduct linkProduct)
+        {
+            if (!linkProduct.Link.StartsWith("https://www.amazon"))
+            {
+                return;
+            }
+
+            HttpClientHandler handler = new HttpClientHandler()
+            {
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            };
+            var client = new HttpClient(handler);
+            var response = CallUrl(client, linkProduct.Link);
+
+            List<string> parsedData = ParseHtmlElemAsync(response.Result);
+
+
+            // price
+            decimal priceConverted = Convert.ToDecimal(parsedData[2]);
+
+
+            Product product = new Product()
+            {
+                Name = parsedData[0],
+                Brand = parsedData[1],
+                Category = linkProduct.Category,
+                Price = priceConverted,
+                Description = linkProduct.Description,
+                ImageFileName = parsedData[3],
+                Created = DateTime.Now
+            };
+            context.Products.Add(product);
+            context.SaveChanges();
+
+        }
+
+        private static async Task<string> CallUrl(HttpClient client, string fullUrl)
+        {
+            var response = await client.GetStringAsync(fullUrl);
+            return response;
+        }
+        private List<string> ParseHtmlElemAsync(string html)
+        {
+            // scrape relevant data
+            List<string> data = new List<string>();
+            HtmlDocument htmlDoc = new HtmlDocument();
+            htmlDoc.LoadHtml(html);
+
+            var name = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@id), ' '), 'productTitle')]");
+            var brand = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@class), ' '), 'a-size-base po-break-word')]");
+            var price = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@class), ' '), 'a-offscreen')]");
+            var imgLink = htmlDoc.DocumentNode.SelectSingleNode("//img[contains(concat(' ', normalize-space(@id), ' '), 'landingImage')]");
+            string src = imgLink.GetAttributeValue("src", string.Empty);
+
+            // download img 
+            var fileName = DateTime.Now.ToString("yyyyMMddHHmmssfff");
+            string fullPath = environment.WebRootPath + "/pictures/" + fileName + ".jpg";
+
+            using (WebClient client = new WebClient())
+            {
+                client.DownloadFile(new Uri(src), fullPath);
+
+            }
+
+
+
+            data.Add(name.InnerText.Trim());
+            data.Add(brand.InnerText);
+            data.Add(price.InnerText.Substring(1, price.InnerText.Length - 1));
+            data.Add(fileName + ".jpg");
+
+            return data;
+           
+
+            
+        }
+
     }
+
+
 
 
 
