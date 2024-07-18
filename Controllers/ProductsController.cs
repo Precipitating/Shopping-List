@@ -215,15 +215,20 @@ namespace ShoppingList.Controllers
             }
 
             // if amazon link provided, scrape and attempt to auto fill.
-            WebScrapeAmazon(lnk);
+            bool result = WebScrapeAmazon(lnk);
 
+            if (!result)
+            {
+                return View(lnk);
+            }
             return RedirectToAction("Index", "Products");
         }
-        public void WebScrapeAmazon(LinkToProduct linkProduct)
+        public bool WebScrapeAmazon(LinkToProduct linkProduct)
         {
             if (!linkProduct.Link.StartsWith("https://www.amazon"))
             {
-                return;
+                ModelState.AddModelError("Link", "Invalid Link");
+                return false;
             }
 
             HttpClientHandler handler = new HttpClientHandler()
@@ -254,6 +259,8 @@ namespace ShoppingList.Controllers
             context.Products.Add(product);
             context.SaveChanges();
 
+            return true;
+
         }
 
         private static async Task<string> CallUrl(HttpClient client, string fullUrl)
@@ -270,9 +277,12 @@ namespace ShoppingList.Controllers
 
             var name = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@id), ' '), 'productTitle')]");
             var brand = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@class), ' '), 'a-size-base po-break-word')]");
-            var price = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@class), ' '), 'a-offscreen')]");
+            var priceWhole = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-whole')]");
+            var priceFraction = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-fraction')]");
             var imgLink = htmlDoc.DocumentNode.SelectSingleNode("//img[contains(concat(' ', normalize-space(@id), ' '), 'landingImage')]");
             string src = imgLink.GetAttributeValue("src", string.Empty);
+
+            var fullPrice = (priceWhole.InnerText + priceFraction.InnerText).Trim();
 
             // download img 
             var fileName = DateTime.Now.ToString("yyyyMMddHHmmssfff");
@@ -288,7 +298,7 @@ namespace ShoppingList.Controllers
 
             data.Add(name.InnerText.Trim());
             data.Add(brand.InnerText);
-            data.Add(price.InnerText.Substring(1, price.InnerText.Length - 1));
+            data.Add(fullPrice);
             data.Add(fileName + ".jpg");
 
             return data;
@@ -297,7 +307,7 @@ namespace ShoppingList.Controllers
             
         }
 
-        // to excel sheet
+        // database to excel sheet
         [HttpGet]
         public async Task<FileResult> ToExcel()
         {
@@ -323,12 +333,12 @@ namespace ShoppingList.Controllers
             {
                 table.Rows.Add(item.Id, item.Name, item.Brand, item.Category, item.Price, item.Description, item.Link, item.Created);
             }
-
+            
             // export to excel
             using (XLWorkbook wb = new XLWorkbook())
             {
+               
                 wb.Worksheets.Add(table);
-
                 using (MemoryStream stream = new MemoryStream())
                 {
                     wb.SaveAs(stream);
