@@ -25,10 +25,18 @@
 
     </div>
 
-    <div class="col"></div>
+    @{
+        // add empty col, so the total price would align to middle of screen
+        <div class="col"></div>
+    }
+
+</div>
+
+<div class="mb-2">
+    <a class="btn btn-primary" asp-controller="Products" asp-action="LinkToProduct">New Product via link</a>
 </div>
 <div class="mb-5">
-    <a class="btn btn-primary" asp-controller="Products" asp-action="LinkToProduct">New Product via link</a>
+    <a class="btn btn-primary" asp-controller="Products" asp-action="ToExcel">To CSV</a>
 </div>
 
 

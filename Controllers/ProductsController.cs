@@ -13,6 +13,9 @@ using Azure;
 using System.Xml;
 using System;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.EntityFrameworkCore;
+using System.Data;
+using ClosedXML.Excel;
 
 
 namespace ShoppingList.Controllers
@@ -292,6 +295,56 @@ namespace ShoppingList.Controllers
            
 
             
+        }
+
+        // to excel sheet
+        [HttpGet]
+        public async Task<FileResult> ToExcel()
+        {
+            var toList = await context.Products.ToListAsync();
+            var fileName = "ShoppingList.xlsx";
+            
+            DataTable table = new DataTable("Products");
+            // add excel column names using Product DB columns
+            table.Columns.AddRange(new DataColumn[]
+            {
+                new DataColumn("Id"),
+                new DataColumn("Name"),
+                new DataColumn("Brand"),
+                new DataColumn("Category"),
+                new DataColumn("Price"),
+                new DataColumn("Description"),
+                new DataColumn("Link"),
+                new DataColumn("Created")
+            });
+
+            // add each item to table
+            foreach (var item in toList)
+            {
+                table.Rows.Add(item.Id, item.Name, item.Brand, item.Category, item.Price, item.Description, item.Link, item.Created);
+            }
+
+            // export to excel
+            using (XLWorkbook wb = new XLWorkbook())
+            {
+                wb.Worksheets.Add(table);
+
+                using (MemoryStream stream = new MemoryStream())
+                {
+                    wb.SaveAs(stream);
+
+                    return File(stream.ToArray(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        fileName);
+                
+                
+                
+                }
+            
+            
+            }
+
+
         }
 
     }
