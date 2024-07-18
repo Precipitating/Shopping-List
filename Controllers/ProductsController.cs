@@ -35,6 +35,22 @@ namespace ShoppingList.Controllers
             var products = context.Products.OrderByDescending(p => p.Id).ToList();
             return View(products);
         }
+        [HttpPost]
+        public IActionResult Index(string searchTerm)
+        {
+            var products = context.Products.OrderByDescending(p => p.Id).ToList();
+            if (String.IsNullOrEmpty(searchTerm))
+            {
+                return View(products);
+            }
+
+            products = context.Products.Where(c => c.Name.Contains(searchTerm)).ToList();
+            return View(products);
+
+
+
+
+        }
 
         public IActionResult Create()
         {
