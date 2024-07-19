@@ -6,6 +6,7 @@ using System.Net;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Spreadsheet;
 
 
 
@@ -21,9 +22,13 @@ namespace ShoppingList.Controllers
             this.context = context;
             this.environment = environment;
         }
+        /// <summary>
+        /// Returns the database to a list type, so it is viewable in Index.cshtml.
+        /// </summary>
+        /// <returns></returns>
         public IActionResult Index()
         {
-            var products = context.Products.OrderByDescending(p => p.Id).ToList();
+            var products = context.Products.ToList();
             return View(products);
         }
 
@@ -33,6 +38,13 @@ namespace ShoppingList.Controllers
         }
 
 
+        /// <summary>
+        /// Inserts an entry to the Products database through the inputs provided in Create.cshtml
+        /// Invalid inputs will refresh the page with error messages below affected input box.
+        /// This function will run when the Submit button is pressed in Create.cshtml
+        /// </summary>
+        /// <param name="productDto"> The inputs provided by the user: name, price, desc, image file etc. </param>
+        /// <returns>IActionResult which is used to change/update pages depending if inputs are valid </returns>
         // submit button for creating new product
         [HttpPost]
         public IActionResult Create(ProductDto productDto)
@@ -94,6 +106,11 @@ namespace ShoppingList.Controllers
 
 
 
+        /// <summary>
+        /// Provides product data to Edit.cshtml.
+        /// </summary>
+        /// <param name="id"> The ID of the product (primary key) </param>
+        /// <returns> Refreshes Index.cshtml if invalid, else adds relevant data to ViewData and goes to Edit.cshtml </returns>
         public IActionResult Edit(int id)
         {
             var product = context.Products.Find(id);
@@ -122,6 +139,13 @@ namespace ShoppingList.Controllers
             return View(productDto);
         }
 
+        /// <summary>
+        /// Updates database from data provided by productDto
+        /// Also replaces image, so index.cshtml displays updated image.
+        /// </summary>
+        /// <param name="id">The primary key of the product, provided by the other Edit function </param>
+        /// <param name="productDto">The product information, provided by the other Edit function.</param>
+        /// <returns> Goes back to Index.cshtml, and doesn't change info if there's an error. </returns>
         [HttpPost]
         public IActionResult Edit(int id, ProductDto productDto)
         {
@@ -176,6 +200,13 @@ namespace ShoppingList.Controllers
         }
 
 
+        /// <summary>
+        /// Delete a database entry, including the linked image in wwwroot/pictures
+        /// </summary>
+        /// <param name="id">ID of product (primary key) </param>
+        /// <returns>
+        /// Refreshes Index.cshtml and can see if it is successful
+        /// if it is deleted, else ID wasn't found in DB </returns>
         public IActionResult Delete(int id)
         {
             var product = context.Products.Find(id);
@@ -197,6 +228,12 @@ namespace ShoppingList.Controllers
         {
             return View();
         }
+
+        /// <summary>
+        /// Creates a database entry automatically thru an Amazon link.
+        /// </summary>
+        /// <param name="lnk"> Data from the LinkToProduct class provided via user input that cannot be automatically filled </param>
+        /// <returns> Back to Index.cshtml if successful, else refreshes page with errors under the affected input box </returns>
         [HttpPost]
         public IActionResult LinkToProduct(LinkToProduct lnk)
         {
@@ -214,9 +251,15 @@ namespace ShoppingList.Controllers
             }
             return RedirectToAction("Index", "Products");
         }
+
+        /// <summary>
+        /// Web scrapes Amazon to get name, price, image and brand.
+        /// </summary>
+        /// <param name="linkProduct"> The provided user input data </param>
+        /// <returns> True if link is valid, else false </returns>
         public bool WebScrapeAmazon(LinkToProduct linkProduct)
         {
-            if (!linkProduct.Link.StartsWith(Constants.AMAZON_LINK))
+            if (!linkProduct.Link.StartsWith(Constants.AMAZON_LINK) && linkProduct.Link.Length > Constants.AMAZON_LINK_LENGTH_REQUIREMENT)
             {
                 ModelState.AddModelError("Link", "Invalid Link");
                 return false;
@@ -254,11 +297,25 @@ namespace ShoppingList.Controllers
 
         }
 
+        /// <summary>
+        /// Attempts send a GET request to link, and returns result.
+        /// </summary>
+        /// <param name="client"> HTTPClient which decompresses gzip, which Amazon has (else returns gibberish HTML string) </param>
+        /// <param name="fullUrl"> Amazon URL </param>
+        /// <returns> Should return the HTML data of the link </returns>
+        /// <exception cref="HttpRequestException">If response fails either thru invalid url, network issues or server error.</exception>
         private static async Task<string> CallUrl(HttpClient client, string fullUrl)
         {
             var response = await client.GetStringAsync(fullUrl);
             return response;
         }
+
+        /// <summary>
+        /// Extracts name, brand, price and image link from Amazon product via XPath queries.
+        /// Also downloads the image to wwwroot/pictures, with fileName supplied to the list for image link.
+        /// </summary>
+        /// <param name="html"> A string with the HTML of the Amazon product </param>
+        /// <returns> A string list of name, brand, price and image link </returns>
         private List<string> ParseHtmlElemAsync(string html)
         {
             // scrape relevant data
@@ -266,6 +323,7 @@ namespace ShoppingList.Controllers
             HtmlDocument htmlDoc = new HtmlDocument();
             htmlDoc.LoadHtml(html);
 
+            // hand pick the relevant elements using XPath
             var name = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@id), ' '), 'productTitle')]");
             var brand = htmlDoc.DocumentNode.SelectSingleNode("//tr[@class='a-spacing-small po-brand']//span[@class='a-size-base po-break-word']");
             var priceWhole = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-whole')]");
@@ -273,9 +331,10 @@ namespace ShoppingList.Controllers
             var imgLink = htmlDoc.DocumentNode.SelectSingleNode("//img[contains(concat(' ', normalize-space(@id), ' '), 'landingImage')]");
             string src = imgLink.GetAttributeValue("src", string.Empty);
 
+            // combine the price together, as Amazon splits these HTML elements.
             var fullPrice = (priceWhole.InnerText + priceFraction.InnerText).Trim();
 
-            // download img 
+            // download img with a filename related to time.
             var fileName = DateTime.Now.ToString("yyyyMMddHHmmssfff");
             string fullPath = environment.WebRootPath + "/pictures/" + fileName + ".jpg";
 
@@ -286,7 +345,7 @@ namespace ShoppingList.Controllers
             }
 
 
-
+            // add parsed HTML elements to List<string>, ensuring no whitespace.
             data.Add(name.InnerText.Trim());
             data.Add(brand.InnerText);
             data.Add(fullPrice);
@@ -298,7 +357,12 @@ namespace ShoppingList.Controllers
 
         }
 
-        // database to excel sheet
+        /// <summary>
+        /// Converts Products SQL Server database to Excel.
+        /// This function runs when the Excel button is pressed.
+        /// This should download the Excel file in your browser.
+        /// </summary>
+        /// <returns>Result of attempting to download the Excel file. </returns>
         [HttpGet]
         public async Task<FileResult> ToExcel()
         {
@@ -324,8 +388,8 @@ namespace ShoppingList.Controllers
             // add each item to table
             foreach (var item in toList)
             {
-                // note image file name is just a placeholder, as it will turn into a picture using ClosedXML later
-                table.Rows.Add(item.Id, item.Name, item.Brand, item.Category, item.Price, "", item.Description, item.Link, item.Created);
+                // unused cells will be added after such as link and image
+                table.Rows.Add(item.Id, item.Name, item.Brand, item.Category, item.Price, "", item.Description, "", item.Created);
 
             }
 
@@ -333,27 +397,18 @@ namespace ShoppingList.Controllers
             using (XLWorkbook wb = new XLWorkbook())
             {
                 var worksheet = wb.Worksheets.Add(table, "Sheet1");
+                
 
                 // expand columns to fit text
                 worksheet.Columns().AdjustToContents();
 
-                // first row is reversed for column name
-                int startRow = 2;
-                int startColumn = 6;
-                foreach (var item in toList)
-                {
-                    var currentCell = worksheet.Cell(startRow, startColumn);
-                    string fullImagePath = environment.WebRootPath + "/pictures/" + item.ImageFileName;
-                    worksheet.Column(startColumn).Width = Constants.EXCEL_IMAGE_WIDTH;
-                    worksheet.Row(startRow).Height = Constants.EXCEL_IMAGE_HEIGHT;
-                    var pic = worksheet.AddPicture(fullImagePath).MoveTo(currentCell, currentCell.CellBelow().CellRight());
-                    pic.Placement = ClosedXML.Excel.Drawings.XLPicturePlacement.MoveAndSize;
 
-                    ++startRow;
-                }
+                ImageToCell(toList, ref worksheet);
+                HyperLinkToCell(toList, ref worksheet);
 
 
-
+                worksheet.Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
+                worksheet.Style.Alignment.SetVertical(XLAlignmentVerticalValues.Center);
                 // download via web
                 using (MemoryStream stream = new MemoryStream())
                 {
@@ -371,6 +426,60 @@ namespace ShoppingList.Controllers
             }
 
 
+        }
+
+
+
+
+        /// <summary>
+        /// Places images into the images cell on the Excel worksheet, resizing to fit the cell.
+        /// </summary>
+        /// <param name="list"> The list of products (database) </param>
+        /// <param name="worksheet"> The Excel worksheet created in ToExcel() </param>
+        /// <param name="startRow"> Should be 2 by default, as first is reserved for column names </param>
+        /// <param name="startColumn"> The column number of the specified category. </param>
+        void ImageToCell(List<Product> list, ref IXLWorksheet worksheet, int startRow = 2, int startColumn = 6)
+        {
+            // add images to cell
+            foreach (var item in list)
+            {
+                var currentCell = worksheet.Cell(startRow, startColumn);
+                string fullImagePath = environment.WebRootPath + "/pictures/" + item.ImageFileName;
+                worksheet.Column(startColumn).Width = Constants.EXCEL_IMAGE_WIDTH;
+                worksheet.Row(startRow).Height = Constants.EXCEL_IMAGE_HEIGHT;
+                var pic = worksheet.AddPicture(fullImagePath).MoveTo(currentCell, currentCell.CellBelow().CellRight());
+                pic.Placement = ClosedXML.Excel.Drawings.XLPicturePlacement.MoveAndSize;
+
+
+                ++startRow;
+            }
+        }
+        /// <summary>
+        /// Places Hyperlinks on the link column in the excel worksheet, if applicable.
+        /// </summary>
+        /// <param name="list"> The list of products (database) </param>
+        /// <param name="worksheet"> The Excel worksheet created in ToExcel() </param>
+        /// <param name="startRow"> Should be 2 by default, as first is reserved for column names </param>
+        /// <param name="startColumn"> The column number of the specified category. </param>
+        void HyperLinkToCell(List<Product> list, ref IXLWorksheet worksheet, int startRow = 2, int startColumn = 8)
+        {
+            foreach (var item in list)
+            {
+                // if no link put No Link in cell instead
+                if (String.IsNullOrEmpty(item.Link))
+                {
+                    worksheet.Cell(startRow, startColumn).Value = "No Link";
+                    ++startRow;
+                    continue;
+                }
+
+                // create hyperlink
+                worksheet.Cell(startRow, startColumn).Value = "Link";
+                worksheet.Cell(startRow, startColumn).SetHyperlink(new XLHyperlink(@item.Link));
+
+                
+                ++startRow;
+            }
         }
 
 
