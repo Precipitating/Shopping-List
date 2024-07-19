@@ -1,21 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding.Binders;
 using ShoppingList.Models;
 using ShoppingList.Services;
 using HtmlAgilityPack;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Threading.Tasks;
 using System.Net;
-using System.Text;
-using System.IO;
-using Azure;
-using System.Xml;
-using System;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using ClosedXML.Excel;
+
 
 
 namespace ShoppingList.Controllers
@@ -46,7 +37,7 @@ namespace ShoppingList.Controllers
         [HttpPost]
         public IActionResult Create(ProductDto productDto)
         {
-            
+
             if (productDto.ImageFile == null)
             {
                 ModelState.AddModelError("ImageFile", "The image file is required.");
@@ -225,7 +216,7 @@ namespace ShoppingList.Controllers
         }
         public bool WebScrapeAmazon(LinkToProduct linkProduct)
         {
-            if (!linkProduct.Link.StartsWith("https://www.amazon"))
+            if (!linkProduct.Link.StartsWith(Constants.AMAZON_LINK))
             {
                 ModelState.AddModelError("Link", "Invalid Link");
                 return false;
@@ -244,7 +235,7 @@ namespace ShoppingList.Controllers
             // price
             decimal priceConverted = Convert.ToDecimal(parsedData[2]);
 
-
+            // insert to db
             Product product = new Product()
             {
                 Name = parsedData[0],
@@ -276,7 +267,7 @@ namespace ShoppingList.Controllers
             htmlDoc.LoadHtml(html);
 
             var name = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@id), ' '), 'productTitle')]");
-            var brand = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@class), ' '), 'a-size-base po-break-word')]");
+            var brand = htmlDoc.DocumentNode.SelectSingleNode("//tr[@class='a-spacing-small po-brand']//span[@class='a-size-base po-break-word']");
             var priceWhole = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-whole')]");
             var priceFraction = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-fraction')]");
             var imgLink = htmlDoc.DocumentNode.SelectSingleNode("//img[contains(concat(' ', normalize-space(@id), ' '), 'landingImage')]");
@@ -302,9 +293,9 @@ namespace ShoppingList.Controllers
             data.Add(fileName + ".jpg");
 
             return data;
-           
 
-            
+
+
         }
 
         // database to excel sheet
@@ -313,7 +304,7 @@ namespace ShoppingList.Controllers
         {
             var toList = await context.Products.ToListAsync();
             var fileName = "ShoppingList.xlsx";
-            
+
             DataTable table = new DataTable("Products");
             // add excel column names using Product DB columns
             table.Columns.AddRange(new DataColumn[]
@@ -323,22 +314,47 @@ namespace ShoppingList.Controllers
                 new DataColumn("Brand"),
                 new DataColumn("Category"),
                 new DataColumn("Price"),
+                new DataColumn("Image"),
                 new DataColumn("Description"),
                 new DataColumn("Link"),
                 new DataColumn("Created")
             });
 
+
             // add each item to table
             foreach (var item in toList)
             {
-                table.Rows.Add(item.Id, item.Name, item.Brand, item.Category, item.Price, item.Description, item.Link, item.Created);
+                // note image file name is just a placeholder, as it will turn into a picture using ClosedXML later
+                table.Rows.Add(item.Id, item.Name, item.Brand, item.Category, item.Price, "", item.Description, item.Link, item.Created);
+
             }
-            
+
             // export to excel
             using (XLWorkbook wb = new XLWorkbook())
             {
-               
-                wb.Worksheets.Add(table);
+                var worksheet = wb.Worksheets.Add(table, "Sheet1");
+
+                // expand columns to fit text
+                worksheet.Columns().AdjustToContents();
+
+                // first row is reversed for column name
+                int startRow = 2;
+                int startColumn = 6;
+                foreach (var item in toList)
+                {
+                    var currentCell = worksheet.Cell(startRow, startColumn);
+                    string fullImagePath = environment.WebRootPath + "/pictures/" + item.ImageFileName;
+                    worksheet.Column(startColumn).Width = Constants.EXCEL_IMAGE_WIDTH;
+                    worksheet.Row(startRow).Height = Constants.EXCEL_IMAGE_HEIGHT;
+                    var pic = worksheet.AddPicture(fullImagePath).MoveTo(currentCell, currentCell.CellBelow().CellRight());
+                    pic.Placement = ClosedXML.Excel.Drawings.XLPicturePlacement.MoveAndSize;
+
+                    ++startRow;
+                }
+
+
+
+                // download via web
                 using (MemoryStream stream = new MemoryStream())
                 {
                     wb.SaveAs(stream);
@@ -346,22 +362,20 @@ namespace ShoppingList.Controllers
                     return File(stream.ToArray(),
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         fileName);
-                
-                
-                
+
+
+
                 }
-            
-            
+
+
             }
 
 
         }
 
+
+
+
     }
-
-
-
-
-
 
 }
