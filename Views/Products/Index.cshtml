@@ -2,7 +2,6 @@
 @{
 }
 
-
 <h2 class="text-center mb-5"> List of Products</h2>
 
 <div class="row">
@@ -26,7 +25,7 @@
 
     @{
         // add empty col, so the total price would align to middle of screen
-        <div class="col"></div>
+                    <div class="col"></div>
     }
 
 </div>
@@ -38,27 +37,11 @@
     <a class="btn btn-primary" asp-controller="Products" asp-action="ToExcel">To CSV</a>
 </div>
 
-<form asp-controller="Products" asp-action="Index">
-    <div class="input-group">
-        <input name="searchTerm" class="form-control" type="text" placeholder="Search">
-        <span class="input-group-text">
-            <button class="btn btn-link text-decoration-none shadow-none" type="submit">🔍</button>
-        </span>
-
-    </div>
-
-</form>
 
 
 
 
-
-
-
-
-
-
-<table class="table">
+<table class="table" id="productTable">
     <thead>
         <tr>
             <th>ID</th>
@@ -114,4 +97,20 @@
 
 
 </table>
+
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<link rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.dataTables.css" />
+<script src="https://cdn.datatables.net/2.0.8/js/dataTables.js"></script>
+
+<script type="text/javascript">
+    var js = jQuery.noConflict(true);
+    js(document).ready(function()
+    {
+        js("#productTable").DataTable(
+            {
+                "order": [[0, "desc"]]
+
+            });
+    });
+</script>
         
