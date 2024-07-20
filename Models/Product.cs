@@ -24,6 +24,8 @@ namespace ShoppingList.Models
 
         public string Link { get; set; } = "";
 
+        public string PriceDifferenceSymbol { get; set; } = "•";
+
 
         public static string GetCurrencySymbol()
         {

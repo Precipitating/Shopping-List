@@ -2,6 +2,11 @@
 
 namespace ShoppingList.Models
 {
+    public enum ACTION_TYPE
+    {
+        ALL,
+        PRICE
+    }
     public class LinkToProduct
     {
         [Required] public string Link { get; set; } = "";
