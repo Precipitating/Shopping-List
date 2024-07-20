@@ -65,16 +65,7 @@
                 <td>@product.Name</td>
                 <td>@product.Brand</td>
                 <td>@product.Category</td>
-                <td>
-                    <p>@Product.GetCurrencySymbol()@product.Price @product.PriceDifferenceSymbol</p>
-
-                    <a class="btn btn-primary btn-sm" asp-controller="Products"
-                       asp-action="UpdatePrice"
-                       asp-route-id="@product.Id">
-                        Update Price
-
-                    </a>
-                </td>
+                <td>@Product.GetCurrencySymbol()@product.Price</td>
                 <td><img src="/pictures/@product.ImageFileName" width="100" /></td>
                 @if (!string.IsNullOrEmpty(product.Link))
                 {

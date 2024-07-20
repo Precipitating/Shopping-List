@@ -7,9 +7,6 @@ using Microsoft.EntityFrameworkCore;
 using System.Data;
 using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Spreadsheet;
-using Irony.Parsing;
-using Microsoft.IdentityModel.Tokens;
-using System.Web;
 
 
 
@@ -92,8 +89,7 @@ namespace ShoppingList.Controllers
                 Description = productDto.Description,
                 ImageFileName = newFileName,
                 Link = productDto.Link,
-                Created = DateTime.Now,
-                PriceDifferenceSymbol = "•"
+                Created = DateTime.Now
 
             };
 
@@ -159,12 +155,7 @@ namespace ShoppingList.Controllers
             {
                 return RedirectToAction("Index", "Products");
             }
-            // if link is 'null' change to empty string
-            if (productDto.Link == null)
-            {
-                productDto.Link = productDto.Link ?? string.Empty;
-                ModelState.Remove("Link");
-            }
+
             if (!ModelState.IsValid)
             {
                 ViewData["ProductId"] = product.Id;
@@ -197,12 +188,10 @@ namespace ShoppingList.Controllers
             product.Name = productDto.Name;
             product.Brand = productDto.Brand;
             product.Category = productDto.Category;
-            product.PriceDifferenceSymbol = GetPriceDifferenceSymbol(product.Price, productDto.Price);
             product.Price = productDto.Price;
             product.Description = productDto.Description;
             product.ImageFileName = newFileName;
             product.Link = productDto.Link;
-
 
             context.SaveChanges();
 
@@ -252,25 +241,14 @@ namespace ShoppingList.Controllers
             {
                 return View(lnk);
             }
-            if (!lnk.Link.StartsWith(Constants.AMAZON_LINK) && lnk.Link.Length > Constants.AMAZON_LINK_LENGTH_REQUIREMENT)
-            {
-                ModelState.AddModelError("Link", "Invalid Link");
-                return View(lnk);
-            }
 
             // if amazon link provided, scrape and attempt to auto fill.
-            List<string> result = WebScrapeAmazon(lnk.Link);
-            if (result.IsNullOrEmpty())
+            bool result = WebScrapeAmazon(lnk);
+
+            if (!result)
             {
                 return View(lnk);
             }
-
-            decimal priceConverted = Convert.ToDecimal(result[2]);
-
-
-            // save to db
-            ParsedAmazonToDB(lnk, result, priceConverted);;
-
             return RedirectToAction("Index", "Products");
         }
 
@@ -278,55 +256,46 @@ namespace ShoppingList.Controllers
         /// Web scrapes Amazon to get name, price, image and brand.
         /// </summary>
         /// <param name="linkProduct"> The provided user input data </param>
-        /// <returns> List of parsed data if link is valid, else empty list </returns>
-        public List<string> WebScrapeAmazon(string link, ACTION_TYPE dataToReturn = ACTION_TYPE.ALL)
+        /// <returns> True if link is valid, else false </returns>
+        public bool WebScrapeAmazon(LinkToProduct linkProduct)
         {
-            List<string> parsedData;
+            if (!linkProduct.Link.StartsWith(Constants.AMAZON_LINK) && linkProduct.Link.Length > Constants.AMAZON_LINK_LENGTH_REQUIREMENT)
+            {
+                ModelState.AddModelError("Link", "Invalid Link");
+                return false;
+            }
 
             HttpClientHandler handler = new HttpClientHandler()
             {
                 AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
             };
             var client = new HttpClient(handler);
-            var response = CallUrl(client, link);
+            var response = CallUrl(client, linkProduct.Link);
 
-            // parse relevant data to list (price, name, etc)
-            parsedData = ParseHtmlElem(response.Result, dataToReturn);
+            List<string> parsedData = ParseHtmlElemAsync(response.Result);
 
 
-            return parsedData;
+            // price
+            decimal priceConverted = Convert.ToDecimal(parsedData[2]);
 
-        }
-
-        /// <summary>
-        /// Save the parsed Amazon data to DB
-        /// </summary>
-        /// <param name="linkProduct"> The provided user input data from LinkToProduct.cshtml </param>
-        /// <param name="parsedData"> The parsed Amazon data, result from ParsedHtmlElem() </param>
-        /// <param name="priceConverted"> Parsed amazon data price string -> decimal </param>
-        /// <returns> True, else exception will occur automatically </returns>
-        private bool ParsedAmazonToDB(LinkToProduct linkProduct, List<string> parsedData, decimal priceConverted)
-        {
             // insert to db
             Product product = new Product()
             {
-                // decodes symbols like &amp; to &
-                Name = HttpUtility.HtmlDecode(parsedData[0]),
+                Name = parsedData[0],
                 Brand = parsedData[1],
                 Category = linkProduct.Category,
                 Price = priceConverted,
                 Description = linkProduct.Description,
                 ImageFileName = parsedData[3],
                 Link = linkProduct.Link,
-                Created = DateTime.Now,
-                PriceDifferenceSymbol = "•"
+                Created = DateTime.Now
             };
             context.Products.Add(product);
             context.SaveChanges();
 
             return true;
-        }
 
+        }
 
         /// <summary>
         /// Attempts send a GET request to link, and returns result.
@@ -347,51 +316,40 @@ namespace ShoppingList.Controllers
         /// </summary>
         /// <param name="html"> A string with the HTML of the Amazon product </param>
         /// <returns> A string list of name, brand, price and image link </returns>
-        private List<string> ParseHtmlElem(string html, ACTION_TYPE dataToReturn = ACTION_TYPE.ALL)
+        private List<string> ParseHtmlElemAsync(string html)
         {
             // scrape relevant data
             List<string> data = new List<string>();
             HtmlDocument htmlDoc = new HtmlDocument();
             htmlDoc.LoadHtml(html);
 
-            if (dataToReturn == ACTION_TYPE.ALL)
+            // hand pick the relevant elements using XPath
+            var name = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@id), ' '), 'productTitle')]");
+            var brand = htmlDoc.DocumentNode.SelectSingleNode("//tr[@class='a-spacing-small po-brand']//span[@class='a-size-base po-break-word']");
+            var priceWhole = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-whole')]");
+            var priceFraction = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-fraction')]");
+            var imgLink = htmlDoc.DocumentNode.SelectSingleNode("//img[contains(concat(' ', normalize-space(@id), ' '), 'landingImage')]");
+            string src = imgLink.GetAttributeValue("src", string.Empty);
+
+            // combine the price together, as Amazon splits these HTML elements.
+            var fullPrice = (priceWhole.InnerText + priceFraction.InnerText).Trim();
+
+            // download img with a filename related to time.
+            var fileName = DateTime.Now.ToString("yyyyMMddHHmmssfff");
+            string fullPath = environment.WebRootPath + "/pictures/" + fileName + ".jpg";
+
+            using (WebClient client = new WebClient())
             {
-                // hand pick the relevant elements using XPath
-                var name = htmlDoc.DocumentNode.SelectSingleNode("//span[contains(concat(' ', normalize-space(@id), ' '), 'productTitle')]");
-                var brand = htmlDoc.DocumentNode.SelectSingleNode("//tr[@class='a-spacing-small po-brand']//span[@class='a-size-base po-break-word']");
-                var priceWhole = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-whole')]");
-                var priceFraction = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-fraction')]");
-                var imgLink = htmlDoc.DocumentNode.SelectSingleNode("//img[contains(concat(' ', normalize-space(@id), ' '), 'landingImage')]");
-                string src = imgLink.GetAttributeValue("src", string.Empty);
+                client.DownloadFile(new Uri(src), fullPath);
 
-                // combine the price together, as Amazon splits these HTML elements.
-                string fullPrice = (priceWhole.InnerText + priceFraction.InnerText).Trim();
-
-                // download img with a filename related to time.
-                var fileName = DateTime.Now.ToString("yyyyMMddHHmmssfff");
-                string fullPath = environment.WebRootPath + "/pictures/" + fileName + ".jpg";
-
-                using (WebClient client = new WebClient())
-                {
-                    client.DownloadFile(new Uri(src), fullPath);
-
-                }
-
-
-                // add parsed HTML elements to List<string>, ensuring no whitespace.
-                data.Add(name.InnerText.Trim());
-                data.Add(brand.InnerText);
-                data.Add(fullPrice);
-                data.Add(fileName + ".jpg");
             }
-            else if (dataToReturn == ACTION_TYPE.PRICE)
-            {
-                var priceWhole = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-whole')]");
-                var priceFraction = htmlDoc.DocumentNode.SelectSingleNode("//span[@class='a-price aok-align-center reinventPricePriceToPayMargin priceToPay']//span[@aria-hidden='true']/span[contains(concat(' ', normalize-space(@class), ' '), 'a-price-fraction')]");
-                string fullPrice = (priceWhole.InnerText + priceFraction.InnerText).Trim();
-                data.Add(fullPrice);
-            }
-            
+
+
+            // add parsed HTML elements to List<string>, ensuring no whitespace.
+            data.Add(name.InnerText.Trim());
+            data.Add(brand.InnerText);
+            data.Add(fullPrice);
+            data.Add(fileName + ".jpg");
 
             return data;
 
@@ -445,8 +403,8 @@ namespace ShoppingList.Controllers
                 worksheet.Columns().AdjustToContents();
 
 
-                ImageToCell(toList,  worksheet);
-                HyperLinkToCell(toList, worksheet);
+                ImageToCell(toList, ref worksheet);
+                HyperLinkToCell(toList, ref worksheet);
 
 
                 worksheet.Style.Alignment.SetHorizontal(XLAlignmentHorizontalValues.Center);
@@ -480,7 +438,7 @@ namespace ShoppingList.Controllers
         /// <param name="worksheet"> The Excel worksheet created in ToExcel() </param>
         /// <param name="startRow"> Should be 2 by default, as first is reserved for column names </param>
         /// <param name="startColumn"> The column number of the specified category. </param>
-        void ImageToCell(List<Product> list, IXLWorksheet worksheet, int startRow = 2, int startColumn = 6)
+        void ImageToCell(List<Product> list, ref IXLWorksheet worksheet, int startRow = 2, int startColumn = 6)
         {
             // add images to cell
             foreach (var item in list)
@@ -503,7 +461,7 @@ namespace ShoppingList.Controllers
         /// <param name="worksheet"> The Excel worksheet created in ToExcel() </param>
         /// <param name="startRow"> Should be 2 by default, as first is reserved for column names </param>
         /// <param name="startColumn"> The column number of the specified category. </param>
-        void HyperLinkToCell(List<Product> list, IXLWorksheet worksheet, int startRow = 2, int startColumn = 8)
+        void HyperLinkToCell(List<Product> list, ref IXLWorksheet worksheet, int startRow = 2, int startColumn = 8)
         {
             foreach (var item in list)
             {
@@ -522,62 +480,6 @@ namespace ShoppingList.Controllers
                 
                 ++startRow;
             }
-        }
-
-        /// <summary>
-        /// Updates price by rechecking the Amazon link, updates price difference symbol then saves to db.
-        /// Arrow up if price increased, down if decreased, else stick with the dot.
-        /// </summary>
-        /// <param name="id"> Product id, supplied in the Index.cshtml route id </param>
-        /// <returns> Refreshes index page. </returns>
-        public IActionResult UpdatePrice(int id)
-        {
-
-            var product = context.Products.Find(id);
-
-            // if not found in DB, just refresh
-            if (product == null)
-            {
-                return RedirectToAction("Index", "Products");
-            }
-
-            string link = product.Link;
-            decimal price = product.Price;
-
-            List<string> result = WebScrapeAmazon(product.Link, ACTION_TYPE.PRICE);
-
-            decimal priceConverted = Convert.ToDecimal(result[0]);
-
-            product.PriceDifferenceSymbol = GetPriceDifferenceSymbol(product.Price, priceConverted);
-
-            product.Price = priceConverted;
-
-            context.SaveChanges();
-
-
-            return RedirectToAction("Index", "Products");
-
-
-        }
-        /// <summary>
-        /// Compares two decimal parameters and returns a unicode symbol depending on the result.
-        /// </summary>
-        /// <param name="oldPrice"> Old product price before updating </param>
-        /// <param name="newPrice"> New product price to compare with </param>
-        /// <returns> Up arrow if new price is higher, down if lower, dot if same. </returns>
-        string GetPriceDifferenceSymbol(decimal oldPrice, decimal newPrice)
-        {
-            string symbol = "•";
-            if (oldPrice > newPrice)
-            {
-                symbol = "↓";
-            }
-            else if (oldPrice < newPrice)
-            {
-                symbol = "↑";
-            }
-
-            return symbol;
         }
 
 
